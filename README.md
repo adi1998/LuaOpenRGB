@@ -1,3 +1,3 @@
 ## LuaOpenRGB
 
-Very early WIP OpenRGB client in Lua
+WIP OpenRGB client in Lua

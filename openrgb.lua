@@ -1,4 +1,5 @@
 local socket = require("socket")
+local bit32 = require("bit32")
 
 local OpenRGB = {}
 OpenRGB.__index = OpenRGB
@@ -13,20 +14,28 @@ local PKT = {
     REQUEST_PROTOCOL_VERSION = 40,
     SET_CLIENT_NAME = 50,
     NET_PACKET_ID_RGBCONTROLLER_UPDATELEDS = 1050,
-
+    NET_PACKET_ID_RGBCONTROLLER_UPDATESINGLELED = 1052,
 }
 
 local function pack_u32(n)
-    local b1 = n % (2^8)
-    local b2 = math.floor(n / (2^8)) % (2^8)
-    local b3 = math.floor(n / (2^16)) % (2^8)
-    local b4 = math.floor(n / (2^24)) % (2^8)
+    local b1 = bit32.band(n , 0xff)
+    local b2 = bit32.band(bit32.rshift(n , 8) , 0xff)
+    local b3 = bit32.band(bit32.rshift(n , 16) , 0xff)
+    local b4 = bit32.band(bit32.rshift(n , 24) , 0xff)
+    return string.char(b1, b2, b3, b4)
+end
+
+local function pack_i32(n)
+    local b1 = bit32.band(n , 0xff)
+    local b2 = bit32.band(bit32.rshift(n , 8) , 0xff)
+    local b3 = bit32.band(bit32.rshift(n , 16) , 0xff)
+    local b4 = bit32.band(bit32.rshift(n , 24) , 0xff)
     return string.char(b1, b2, b3, b4)
 end
 
 local function pack_u16(n)
-    local b1 = n % (2^8)
-    local b2 = math.floor(n / (2^8)) % (2^8)
+    local b1 = bit32.band(n , 0xff)
+    local b2 = bit32.band(bit32.rshift(n , 8) , 0xff)
     return string.char(b1, b2)
 end
 
@@ -35,9 +44,9 @@ local function unpack_u32(s, pos)
     local b1, b2, b3, b4 = s:byte(pos, pos + 3)
     local value =
         b1 +
-        b2 * (2^8) +
-        b3 * (2^16) +
-        b4 * (2^24)
+        bit32.lshift(b2, 8) +
+        bit32.lshift(b3, 16) +
+        bit32.lshift(b4, 24)
     return value, pos + 4
 end
 
@@ -55,7 +64,7 @@ local function unpack_u16(s, pos)
     local b1, b2 = s:byte(pos, pos + 1)
     local value =
         b1 +
-        b2 * (2^8)
+        bit32.lshift(b2, 8)
     return value, pos + 2
 end
 
@@ -64,10 +73,9 @@ local function unpack_i32(s, pos)
     local b1, b2, b3, b4 = s:byte(pos, pos + 3)
     local value =
         b1 +
-        b2 * (2^8) +
-        b3 * (2^16) +
-        b4 * (2^24)
-
+        bit32.lshift(b2, 8) +
+        bit32.lshift(b3, 16) +
+        bit32.lshift(b4, 24)
     if value >= 2^31 then
         value = value - 2^32
     end
@@ -82,9 +90,9 @@ end
 
 local function unpack_RGBColor(s, pos)
     local rgb; rgb, pos = unpack_u32(s, pos)
-    local r = rgb % (2^8)
-    local g = math.floor(rgb/(2^8)) % (2^8)
-    local b = math.floor(rgb/(2^16)) % (2^8)
+    local r = bit32.band(rgb, 0xff)
+    local g = bit32.band(bit32.rshift(rgb , 8) , 0xff)
+    local b = bit32.band(bit32.rshift(rgb , 16) , 0xff)
     return { r = r, g = g, b = b}, pos
 end
 
@@ -104,7 +112,7 @@ end
 local function pack_RGBColorN(color_list)
     local n = #color_list
     local value = ""
-    
+
     for idx, color in ipairs(color_list) do
         value = value .. pack_RGBColor(color)
     end
@@ -210,12 +218,18 @@ function OpenRGB.connect(host, port)
     self.host = host or "127.0.0.1"
     self.port = port or PORT
 
-    self.sock = assert(socket.tcp())
-    assert(self.sock:connect(self.host, self.port))
-
+    local sock, err = socket.tcp()
+    if err then
+        return nil, err
+    end
+    self.sock = sock
+    _, err = self.sock:connect(self.host, self.port)
+    if err then
+        return nil, err
+    end
     self.protocol_version = 0
 
-    return self
+    return self, nil
 end
 
 function OpenRGB:send_packet(dev_idx, pkt_id, payload)
@@ -223,11 +237,14 @@ function OpenRGB:send_packet(dev_idx, pkt_id, payload)
 
     local header = build_header(dev_idx, pkt_id, #payload)
 
-    self.sock:send(header .. payload)
+    local _, err = self.sock:send(header .. payload)
+    if err then
+        return err
+    end
 end
 
 function OpenRGB:recv_header()
-    local data = self.sock:receive(16)
+    local data, err = self.sock:receive(16)
     if not data then return nil end
 
     local magic = data:sub(1,4)
@@ -313,7 +330,7 @@ function dump(o, depth)
     end
 end
 
-function ParseControllerData(data)
+local function ParseControllerData(data)
     local controller_data = {}
     local pos = 1
     controller_data.data_size, pos = unpack_u32(data, pos)
@@ -372,6 +389,14 @@ function OpenRGB:UpdateLEDs(pkt_dev_idx, led_color)
     payload = payload .. pack_RGBColorN(led_color) -- led_color
 
     self:send_packet(pkt_dev_idx, PKT.NET_PACKET_ID_RGBCONTROLLER_UPDATELEDS, payload)
+end
+
+function OpenRGB:UpdateSingleLEDs(pkt_dev_idx, led_idx, led_color)
+    local payload = ""
+    payload = payload .. pack_i32(led_idx)
+    payload = payload .. pack_RGBColor(led_color)
+
+    self:send_packet(pkt_dev_idx, PKT.NET_PACKET_ID_RGBCONTROLLER_UPDATESINGLELED, payload)
 end
 
 return OpenRGB
