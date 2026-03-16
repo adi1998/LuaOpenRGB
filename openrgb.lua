@@ -126,22 +126,6 @@ function OpenRGB:get_controller_count()
     return count
 end
 
-function dump(o, depth)
-    depth = depth or 0
-    if type(o) == 'table' then
-        local s = "\n" .. string.rep("\t", depth) .. '{\n'
-        for k,v in pairs(o) do
-            if type(k) ~= 'number' then k = '"'..k..'"' end
-            s = s .. string.rep("\t",(depth+1)) .. '['..k..'] = ' .. dump(v, depth + 1) .. ',\n'
-        end
-        return s .. string.rep("\t", depth) .. '}'
-    elseif type(o) == "string" then
-        return "\"" .. o .. "\""
-    else
-        return tostring(o)
-    end
-end
-
 function OpenRGB:get_controller_data(idx)
 
     local payload = ""

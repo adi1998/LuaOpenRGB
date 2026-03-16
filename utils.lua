@@ -99,7 +99,7 @@ function utils.pack_RGBColorN(color_list)
     local value = ""
 
     for idx, color in ipairs(color_list) do
-        value = value .. pack_RGBColor(color)
+        value = value .. utils.pack_RGBColor(color)
     end
     return value
 end
@@ -219,6 +219,24 @@ function utils.unpack_Controller_Data(data)
     controller_data.num_led_alt_names, pos = utils.unpack_u16(data, pos)
     controller_data.led_alt_names, pos = utils.unpack_LED_Alt_Names(data, pos, controller_data.num_led_alt_names)
     controller_data.flags, pos = utils.unpack_u32(data, pos)
-    print(dump(controller_data))
+    print(utils.dump(controller_data))
     return controller_data
 end
+
+function utils.dump(o, depth)
+    depth = depth or 0
+    if type(o) == 'table' then
+        local s = "\n" .. string.rep("\t", depth) .. '{\n'
+        for k,v in pairs(o) do
+            if type(k) ~= 'number' then k = '"'..k..'"' end
+            s = s .. string.rep("\t",(depth+1)) .. '['..k..'] = ' .. utils.dump(v, depth + 1) .. ',\n'
+        end
+        return s .. string.rep("\t", depth) .. '}'
+    elseif type(o) == "string" then
+        return "\"" .. o .. "\""
+    else
+        return tostring(o)
+    end
+end
+
+return utils
