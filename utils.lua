@@ -41,7 +41,7 @@ function utils.unpack_u32_arr(s, pos, n)
         local u32; u32, pos = utils.unpack_u32(s, pos)
         table.insert(arr, u32)
     end
-    return arr
+    return arr, pos
 end
 
 function utils.unpack_u16(s, pos)
@@ -69,16 +69,16 @@ function utils.unpack_i32(s, pos)
 end
 
 function utils.unpack_string(s, pos, len)
-    local value = string.sub(s, pos, pos+len-2)
-    return value, pos+len
+    local value = string.sub(s, pos, pos + len - 2)
+    return value, pos + len
 end
 
 function utils.unpack_RGBColor(s, pos)
     local rgb; rgb, pos = utils.unpack_u32(s, pos)
     local r = bit32.band(rgb, 0xff)
-    local g = bit32.band(bit32.rshift(rgb , 8) , 0xff)
-    local b = bit32.band(bit32.rshift(rgb , 16) , 0xff)
-    return { r = r, g = g, b = b}, pos
+    local g = bit32.band(bit32.rshift(rgb, 8), 0xff)
+    local b = bit32.band(bit32.rshift(rgb, 16), 0xff)
+    return { r = r, g = g, b = b }, pos
 end
 
 function utils.unpack_RGBColorN(s, pos, num_colors)
